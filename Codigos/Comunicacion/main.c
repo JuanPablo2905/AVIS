@@ -3,13 +3,44 @@
 #include <stdlib.h>
 #include "pico/stdlib.h"
 #include "hardware/pwm.h"
+#include "hardware/adc.h"
 #include "mpu.h"
+#include "lcd.h"
 
 #define ENA 16
 #define PWM_WRAP 250
-#define MOTOR_ON 200
-#define MOTOR_OFF 230
-#define TOLERANCIA 2.0
+#define TOLERANCIA 30.0
+#define FWD_GPIO    15
+#define REV_GPIO    13
+
+
+static inline void vfd_stop(void) {
+    gpio_put(FWD_GPIO, false);
+    gpio_put(REV_GPIO, false);
+    sleep_ms(1);
+}
+
+
+static inline void vfd_set_direction(bool direction) {
+    gpio_put(REV_GPIO, direction);
+    sleep_ms(1);
+}
+
+static inline void vfd_forward(void) {
+    gpio_put(REV_GPIO, false);
+    gpio_put(FWD_GPIO, true);
+    sleep_ms(1);
+}
+
+static inline void vfd_reverse(void) {
+    gpio_put(FWD_GPIO, false);
+    gpio_put(REV_GPIO, true);
+    sleep_ms(1);
+}
+
+static inline void pwm_set_duty_percent(uint gpio, uint percent) {
+    pwm_set_gpio_level(gpio, (uint16_t) (percent * PWM_WRAP / 100));
+}
 
 void configurar_pwm(uint gpio) {
     gpio_set_function(gpio, GPIO_FUNC_PWM);
@@ -18,52 +49,57 @@ void configurar_pwm(uint gpio) {
     pwm_config_set_wrap(&config, PWM_WRAP);
     pwm_config_set_clkdiv(&config, 10);
     pwm_init(slice, &config, true);
-    pwm_set_gpio_level(gpio, MOTOR_OFF);
+    pwm_set_duty_percent(gpio, 30);
   
 }
 
 int main() {
     stdio_init_all();
-    sleep_ms(2000);
+    gpio_init(FWD_GPIO);
+    gpio_init(REV_GPIO);
+    gpio_set_dir(FWD_GPIO, true);
+    gpio_set_dir(REV_GPIO, true);
     configurar_pwm(ENA);
     mpu6050_init();
+
+    lcd_init(i2c0, 0x27);
+    lcd_clear();
 
     char buffer[64];
     int index = 0;
     int pitch_deseado = 0;
-    pitch_deseado = (int) leer_pitch();
+    pitch_deseado = (int) leer_pitch() ;
 
-    printf("Ingrese un ángulo de referencia:\n");
+    adc_init();
+    adc_gpio_init(27);
+    adc_select_input(1);
+
+    lcd_clear();
+    lcd_string("Actual: ");
+    lcd_set_cursor(1, 0);
+    lcd_string("Deseado: ");
 
     while (true) {
-        pwm_set_gpio_level(ENA, MOTOR_OFF);
-        int c = getchar_timeout_us(0);
-
-        if (c != PICO_ERROR_TIMEOUT) {
-            if (c == '\r' || c == '\n') {
-                buffer[index] = '\0';
-                if (index > 0) {
-                    pitch_deseado = atoi(buffer);
-                    printf("Ángulo deseado: %d\n", pitch_deseado);
-                    index = 0;
-                }
-                printf("Ingrese un ángulo de referencia:\n");
-            } else if (index < sizeof(buffer) - 1) {
-                buffer[index++] = (char)c;
-            }
-        }
-
+        int adc_val = adc_read();
+        double pitch_deseado = ((adc_val *360.0) / 4095.0) - 180;
         double pitch_actual = leer_pitch();
-        printf("Pitch actual: %.2f\n", pitch_actual);
-        printf("Pitch deseado: %d\n", pitch_deseado);
+        sprintf(buffer, "%.2f", pitch_actual);
+        lcd_set_cursor(0, 8);
+        lcd_string(buffer);
+        sprintf(buffer, "%5.1f", pitch_deseado);
+        lcd_set_cursor(1, 9);
+        lcd_string(buffer);
 
         if (pitch_actual < pitch_deseado - TOLERANCIA) {
-            pwm_set_gpio_level(ENA, MOTOR_ON);
+            vfd_reverse();
+            sleep_ms(1);        
         } else if (pitch_actual > pitch_deseado + TOLERANCIA) {
-            pwm_set_gpio_level(ENA, MOTOR_ON);
-        } else {
-            pwm_set_gpio_level(ENA, MOTOR_OFF);
-            printf("Ángulo alcanzado: motor detenido\n");
+            vfd_forward();
+             sleep_ms(1);
+        } 
+        else  {
+            vfd_stop();
+             sleep_ms(1);
         }
 
         sleep_ms(200);

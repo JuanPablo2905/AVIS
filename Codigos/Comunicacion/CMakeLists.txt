@@ -29,19 +29,22 @@ add_executable(MotorConNums
     main.c       # El archivo principal que usás ahora
     mpu.c        # El módulo que contiene la lógica del MPU6050
 )
+# Vincula todas las librerías necesarias
+target_link_libraries(MotorConNums 
+    pico_stdlib
+    hardware_pwm
+    hardware_adc
+)
 
-# Habilita USB para printf y lectura por consola
 pico_enable_stdio_usb(MotorConNums 1)
 
 # Desactiva UART (no se usa)
 pico_enable_stdio_uart(MotorConNums 0)
 
-# Vincula todas las librerías necesarias
-target_link_libraries(MotorConNums 
-    pico_stdlib
-    hardware_pwm
-    hardware_i2c
-)
 
 # Genera los archivos binarios finales
 pico_add_extra_outputs(MotorConNums)
+
+
+add_subdirectory(rpipico-lcd-main)
+target_link_libraries(MotorConNums lcd)

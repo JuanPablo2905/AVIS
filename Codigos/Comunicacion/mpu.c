@@ -12,7 +12,7 @@ static int addr = 0x68;
 
 void mpu6050_init() {
     uint8_t buf[] = {0x6B, 0x80};
-    i2c_init(i2c_default, 400 * 1000);
+    i2c_init(i2c_default, 100000);
     gpio_set_function(PICO_DEFAULT_I2C_SDA_PIN, GPIO_FUNC_I2C);
     gpio_set_function(PICO_DEFAULT_I2C_SCL_PIN, GPIO_FUNC_I2C);
     gpio_pull_up(PICO_DEFAULT_I2C_SDA_PIN);
